@@ -10,20 +10,8 @@ class Virtual_System:
         self.file_structure = {}
         self.load_zip()
 
-    def load_access_rights(self):
-        access_rights = {}
-        with zipfile.ZipFile(self.zip_path, 'r') as z:
-            with z.open('access_rights.txt') as f:
-                for line in f:
-                    parts = line.decode().strip().split()
-                    if len(parts) == 2:
-                        filename, rights = parts
-                        access_rights[filename] = rights
-        return access_rights
-
     def load_zip(self):
         with zipfile.ZipFile(self.zip_path, 'r') as z:
-            rights_dict = self.load_access_rights()
             for obj_path in z.namelist():
                 if obj_path == 'access_rights.txt':
                     continue
@@ -33,14 +21,12 @@ class Virtual_System:
                     is_file = part == parts[-1] and not obj_path.endswith('/')
                     if is_file:
                         current_level[part] = {
-                            "type": "file",
-                            "access_rights": rights_dict.get(part, None)
+                            "type": "file"
                         }
                     else:
                         if part not in current_level:
                             current_level[part] = {
                                 "type": "folder",
-                                "access_rights": rights_dict.get(part, None),
                                 "list_f": {}
                             }
                         current_level = current_level[part]["list_f"]
@@ -50,8 +36,8 @@ class Virtual_System:
             self.current_dir = '/'
             return
         parsed_path = self.path_parser(path)
-        if self.get_dictionary_from_absolute_path(parsed_path) is None:
-            print(f"cd: {path}: такого каталога нет")
+        if self.dictionary(parsed_path) is None:
+            print(f"cd: {path}: нет такого каталога(")
         else:
             self.current_dir = parsed_path
 
@@ -60,7 +46,6 @@ class Virtual_System:
             abs_path = path
         else:
             abs_path = self.current_dir + path
-
         parts = abs_path.split('/')
         final_parts = []
         for part in parts:
@@ -77,7 +62,7 @@ class Virtual_System:
             final_path = '/'
         return final_path
 
-    def get_dictionary_from_absolute_path(self, path):
+    def dictionary(self, path):
         if path == "/":
             return self.file_structure
         parts = path.strip('/').split('/')
@@ -94,11 +79,10 @@ class Virtual_System:
 
     def ls(self, path="."):
         parsed_path = self.path_parser(path)
-        directory_dict = self.get_dictionary_from_absolute_path(parsed_path)
-
+        directory_dict = self.dictionary(parsed_path)
         return path, directory_dict
 
-class ShellEmulator:
+class Emulator:
     def __init__(self, username, hostname, vfs):
         self.username = username
         self.hostname = hostname
@@ -107,8 +91,23 @@ class ShellEmulator:
     def whoami(self):
         return self.username
 
-    def rev(self, string):
-        return string[::-1]
+    def rev(self, file_path):
+
+        full_path = os.path.join(self.vfs.current_dir, file_path).replace("\\", "/")
+
+        try:
+            with zipfile.ZipFile(self.vfs.zip_path, 'r') as z:
+
+                if full_path[1:] in z.namelist():
+                    with z.open(full_path[1:]) as file:
+                        for line in file:
+                            return line.decode("utf-8").strip()[::-1]
+                else:
+                    print(f"rev: {file_path}: No such file in the zip archive. Reversing the string.")
+                    return file_path[::-1]
+
+        except Exception as e:
+            print(f"Error reading file: {e}")
 
     def run(self):
         while True:
@@ -125,17 +124,13 @@ class ShellEmulator:
             elif command == "cd":
                 if len(args) == 1:
                     self.vfs.cd(args[0])
-                else:
-                    print("Возможно вы некорректно используете команду cd.")
-                    print("Использование: cd <path>")
-                    print("Изменить текущий каталог на <path>")
             elif command == "ls":
                 if len(args) == 0:
                     path, directory_dict = self.vfs.ls()
                 else:
                     path, directory_dict = self.vfs.ls(args[0])
                 if directory_dict is None:
-                    print(f"ls: {path}: такого каталога нет")
+                    print(f"ls: {path}: такого каталога нет(")
                 else:
                     print("\n".join(sorted(directory_dict.keys())))
 
@@ -146,23 +141,20 @@ class ShellEmulator:
                 print(self.rev(line[4:]))
 
             else:
-                print(f"Неизвестная команда: {command[4:]} ")
-        print("До новых встреч!!!")
-
+                print(f"Такую команду нельзя использовать: {line} ")
+        print("Удачи!!!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Shell Emulator")
     parser.add_argument("config", help="Path to the configuration file")
     args = parser.parse_args()
 
-    # Чтение конфигурационного файла
     config = configparser.ConfigParser()
     config.read(args.config)
     username = config['DEFAULT']['username']
     hostname = config['DEFAULT']['hostname']
     filesystem_path = config['DEFAULT']['filesystem_path']
 
-    # Создание экземпляра виртуальной файловой системы
     vfs = Virtual_System(filesystem_path)
-    shell = ShellEmulator(username, hostname, vfs)
+    shell = Emulator(username, hostname, vfs)
     shell.run()
