@@ -1,7 +1,6 @@
 import pytest
 import zipfile
-import os
-from emulator import Virtual_System, ShellEmulator
+from emulator import Virtual_System, Emulator
 
 
 @pytest.fixture(scope="function")  # Изменено на scope="function"
@@ -25,7 +24,7 @@ def setup_vfs(create_test_zipfile):
 def shell_emulator(setup_vfs):
     username = "testuser"
     hostname = "testhost"
-    emulator = ShellEmulator(username, hostname, setup_vfs)
+    emulator = Emulator(username, hostname, setup_vfs)
     return emulator
 
 
@@ -65,11 +64,11 @@ def test_whoami(shell_emulator):
 
 
 def test_rev(shell_emulator):
-    assert shell_emulator.rev("Hello") == "olleH"
+    assert shell_emulator.rev("test.txt") == ("!dlroW olleH")
     assert shell_emulator.rev("12345") == "54321"
 
 
 def test_run_exit_command(mocker, shell_emulator):
-    # Мокаем input для выхода из программы
+
     mocker.patch('builtins.input', side_effect=['exit'])
-    shell_emulator.run()  # Метод не должен вызывать исключения
+    shell_emulator.run()
